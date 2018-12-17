@@ -84,14 +84,42 @@ sepsis_pre3 <- sepsis_pre2 %>%
          sepsis_source_cns = sepsis_source_4,
          sepsis_source_skin = sepsis_source_5,
          sepsis_source_other = sepsis_source_6,
-         sepsis_source_unknown = sepsis_source_9) 
+         sepsis_source_unknown = sepsis_source_9) %>% 
+  mutate(redcap_event_name = str_remove(redcap_event_name,"_arm_1")) 
 
 # recode final diagnosis for sepsis yes/no
 sepsis_pre4 <- sepsis_pre3 %>% 
   mutate(sepsis_yn_old = ifelse(final_diag==1|final_diag==2,1,0)) %>% 
-  mutate(sepsis_yn_new = ifelse(final_diag_new==1|final_diag_new==2|final_diag_new==5|final_diag_new==6,1,0))
+  mutate(sepsis_yn_new = ifelse(final_diag_new==1|final_diag_new==2|final_diag_new==5|final_diag_new==6,1,0)) %>% 
+  select(-hosp_adm_date,-hosp_adm_time,-icu_adm_date,-icu_adm_time)
 
+# load dates dataset
+roci_dates_pre1 <- read_excel("data/raw_data/ROCI DATA SA. Dates.xls")
+roci_dates_pre2 <- clean_names(roci_dates_pre1) # clean names
+roci_dates_pre3 <- roci_dates_pre2 %>% 
+  rename(subj_id=subject_id) %>% # change variables to be in line with primary dataset
+  mutate(redcap_event_name=case_when(event_name == "Baseline" ~ "baseline",
+                                     event_name == "Day 0" ~ "day_0",
+                                     event_name == "Day 3" ~ "day_3",
+                                     event_name == "Day 7" ~ "day_7")) %>% 
+  mutate(date_actual=case_when(event_name == "Baseline" ~ initial_24_hours_evaluation_starting_date,
+                                  redcap_event_name != "Baseline" ~ date)) %>% 
+  mutate(time_actual=case_when(event_name == "Baseline" ~ initial_24_hours_evaluation_start_time_hour_0_23,
+                               redcap_event_name != "Baseline" ~ time_in_hours_0_23)) %>% 
+  select(subj_id,redcap_event_name,date_actual,time_actual)
 
+# merge dates with baseline dataset
+sepsis_pre5 <- inner_join(roci_dates_pre3,sepsis_pre4) %>% 
+  mutate(date_actual=as.Date(date_actual))
+
+# import MRN
+roci_mrn <- read_excel("data/raw_data/roci_mrn_2018_12_17.xlsx")
+
+# merge dataset with mrn dataset
+sepsis_pre6 <- inner_join(roci_mrn,sepsis_pre5)
+
+# export cleaned dataset with actual dates
+write_csv(sepsis_pre6,"data/clean_data/roci_clean_2018_12_17.csv")
          
 
 
